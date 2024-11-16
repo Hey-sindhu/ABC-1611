@@ -1,23 +1,91 @@
-- name: Install Terraform and Git
+---
+- name: Install Terraform, Git, Clone Repo, Execute Terraform Script, and Clean Up
   hosts: all
+  become: yes
   tasks:
-    - name: Download Terraform
+    - name: Downloading the Terraform
       ansible.builtin.get_url:
-        url: "https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip"
-        dest: "/home/azureuser/ansible/terraform.zip"
-        mode: '0644'  # Optional: Ensure proper file permissions
-      
-    - name: Extract Terraform
+        url: https://releases.hashicorp.com/terraform/1.5.7/terraform_1.5.7_linux_amd64.zip
+        dest: /home/azureuser/ansible/terraform.zip
+        mode: "0644"
+    - name: Extracting Terraform
       ansible.builtin.unarchive:
-        src: "/home/azureuser/ansible/terraform.zip"
-        dest: "/home/azureuser/ansible"
+        src: /home/azureuser/ansible/terraform.zip
+        dest: /home/azureuser/ansible
         remote_src: yes
-
+    - name: Moving Terraform to binary
+      ansible.builtin.command:
+        cmd: mv /home/azureuser/ansible/terraform /usr/local/bin/terraform
+        creates: /usr/local/bin/terraform
     - name: Verify Terraform Installation
-      ansible.builtin.command: "/home/azureuser/ansible/terraform --version"
+      ansible.builtin.command: terraform --version
       register: terraform_version
-
-    - name: Display Terraform Version
+    - name: Displaying Terraform Version
       ansible.builtin.debug:
         var: terraform_version.stdout
+    - name: Installing Git
+      apt:
+        name: git
+        state: present
+    - name: Cloning the Git repository that contains Terraform scripts
+      ansible.builtin.git:
+        repo: https://github.com/Hey-sindhu/terraform-tasks.git
+        dest: /home/azureuser/ansible/terraform-scripts
+        version: main
+        force: yes
+    - name: Initializing Terraform
+      ansible.builtin.command:
+        cmd: terraform init
+        chdir: /home/azureuser/ansible/terraform-scripts
+      register: terraform_init_output
+      ignore_errors: yes
+    - name: Capture Terraform init output
+      ansible.builtin.debug:
+        var: terraform_init_output.stdout
+    - name: Applying auto approve for Terraform Configuration
+      ansible.builtin.command:
+        cmd: terraform apply -auto-approve
+        chdir: /home/azureuser/ansible/terraform-scripts
+      register: terraform_apply_output
+      ignore_errors: yes
+    - name: Capture Terraform apply output
+      ansible.builtin.debug:
+        var: terraform_apply_output.stdout
+    - name: Check if Terraform binary exists
+      ansible.builtin.stat:
+        path: /usr/local/bin/terraform
+      register: terraform_binary
+    - name: Remove Terraform binary if it exists
+      ansible.builtin.file:
+        path: /usr/local/bin/terraform
+        state: absent
+      when: terraform_binary.stat.exists
+    - name: Check if Terraform zip file exists
+      ansible.builtin.stat:
+        path: /home/azureuser/ansible/terraform.zip
+      register: terraform_zip
+    - name: Remove Terraform zip file if it exists
+      ansible.builtin.file:
+        path: /home/azureuser/ansible/terraform.zip
+        state: absent
+      when: terraform_zip.stat.exists
+    - name: Check if extracted Terraform files exist
+      ansible.builtin.stat:
+        path: /home/azureuser/ansible/terraform
+      register: terraform_extracted_files
+    - name: Remove extracted Terraform files if they exist
+      ansible.builtin.file:
+        path: /home/azureuser/ansible/terraform
+        state: absent
+      when: terraform_extracted_files.stat.exists
+    - name: Check if the cloned Git repository exists
+      ansible.builtin.stat:
+        path: /home/azureuser/ansible/terraform-scripts
+      register: git_repo
+    - name: Removing the cloned git repo and tf scripts
+      ansible.builtin.file:
+        path: /home/azureuser/ansible/terraform-scripts
+        state: absent
+      when: git_repo.stat.exists
+
 
